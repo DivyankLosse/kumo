@@ -32,7 +32,8 @@ class ReminderWorkerTest {
     @Test fun morningOverviewPostsNotificationWhenEnabled() = runTest {
         nm.cancelAll()
         app.container.settings.setRemindersEnabled(true)
-        app.container.settings.setReminderDisabled(ReminderType.MORNING.name, false)
+        app.container.settings.setReminderEnabled(ReminderType.MORNING.name, true)
+        app.container.settings.setQuietHours(0, 0)
         assertEquals(ListenableWorker.Result.success(), run(ReminderType.MORNING))
         val posted = nm.activeNotifications.firstOrNull { it.id == 1000 + ReminderType.MORNING.ordinal }
         assertNotNull("morning notification posted", posted)
@@ -49,10 +50,10 @@ class ReminderWorkerTest {
     @Test fun perTypeToggleIsRespected() = runTest {
         nm.cancelAll()
         app.container.settings.setRemindersEnabled(true)
-        app.container.settings.setReminderDisabled(ReminderType.GYM.name, true)
+        app.container.settings.setReminderEnabled(ReminderType.GYM.name, false)
         run(ReminderType.GYM)
         assertTrue(nm.activeNotifications.none { it.id == 1000 + ReminderType.GYM.ordinal })
-        app.container.settings.setReminderDisabled(ReminderType.GYM.name, false)
+        app.container.settings.setReminderEnabled(ReminderType.GYM.name, true)
         app.container.settings.setRemindersEnabled(false)
     }
 }

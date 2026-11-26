@@ -20,6 +20,7 @@ import com.ascend.app.data.prefs.Settings
 import com.ascend.app.data.prefs.ThemeMode
 import com.ascend.app.di.AppContainer
 import com.ascend.app.work.Notifier
+import com.ascend.app.work.QuickActionLogic
 import com.ascend.app.work.ReminderScheduler
 import com.ascend.app.work.ReminderType
 import com.ascend.app.ui.components.*
@@ -41,7 +42,8 @@ class SettingsViewModel(private val c: AppContainer, private val app: android.ap
         c.settings.setRemindersEnabled(on)
         if (on) ReminderScheduler.scheduleAll(app) else ReminderScheduler.cancelAll(app)
     }
-    fun reminderType(t: ReminderType, on: Boolean) = io { c.settings.setReminderDisabled(t.name, !on) }
+    fun reminderType(t: ReminderType, on: Boolean) = io { c.settings.setReminderEnabled(t.name, on) }
+    fun quietHours(startMin: Int, endMin: Int) = io { c.settings.setQuietHours(startMin, endMin) }
 
     private fun run(label: String, block: suspend () -> Int) {
         viewModelScope.launch {
@@ -104,6 +106,9 @@ fun SettingsScreen(onBack: () -> Unit) {
                 if (permissionDenied) Text("Notifications are blocked. Allow them in system settings to get reminders.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
             if (s.remindersEnabled) {
+                item(key = "quiet-hours") {
+                    QuietHoursEditor(s.quietStartMin, s.quietEndMin, vm::quietHours)
+                }
                 ReminderType.entries.forEach { t ->
                     item(key = t.name) {
                         val time = "%02d:%02d".format(t.hour, t.minute)
@@ -117,7 +122,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                                 Text(t.title, style = MaterialTheme.typography.bodyLarge)
                                 Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            Switch(t.name !in s.disabledReminders, { vm.reminderType(t, it) })
+                            Switch(t.name in s.enabledReminders, { vm.reminderType(t, it) })
                         }
                     }
                 }
@@ -177,5 +182,27 @@ fun SettingsScreen(onBack: () -> Unit) {
 private fun DataButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     FilledTonalButton(onClick = onClick, shape = CircleShape, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
         Icon(icon, null); Spacer(Modifier.width(8.dp)); Text(label, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun QuietHoursEditor(startMin: Int, endMin: Int, onChange: (Int, Int) -> Unit) {
+    var start by remember(startMin) { mutableStateOf(QuickActionLogic.formatClock(startMin)) }
+    var end by remember(endMin) { mutableStateOf(QuickActionLogic.formatClock(endMin)) }
+    val startParsed = QuickActionLogic.parseClock(start)
+    val endParsed = QuickActionLogic.parseClock(end)
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text("Quiet hours", style = MaterialTheme.typography.bodyLarge)
+        Text("No reminders are posted in this window.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(
+                start, { start = it; val v = QuickActionLogic.parseClock(it); if (v != null && endParsed != null) onChange(v, endParsed) },
+                label = { Text("Start (HH:MM)") }, singleLine = true, isError = startParsed == null, modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                end, { end = it; val v = QuickActionLogic.parseClock(it); if (v != null && startParsed != null) onChange(startParsed, v) },
+                label = { Text("End (HH:MM)") }, singleLine = true, isError = endParsed == null, modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
