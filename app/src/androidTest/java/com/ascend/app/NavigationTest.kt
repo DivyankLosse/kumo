@@ -24,14 +24,18 @@ class NavigationTest {
     private fun tab(label: String) =
         rule.onNode(hasText(label) and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab)).performClick()
 
+    /** CI emulators render slower than local ones, so wait for the text instead of asserting immediately. */
+    private fun waitForText(text: String) =
+        rule.waitUntil(10_000) { rule.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+
     @Test
     fun allTabsRender() {
         rule.waitUntil(10_000) { rule.onAllNodesWithText("Focus with", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        tab("Planner"); rule.onNodeWithText("Add block", useUnmergedTree = true).assertExists()
-        tab("Career"); rule.onNodeWithText("Applied AI/ML Engineer by December 2027", useUnmergedTree = true).assertExists()
-        tab("Fitness"); rule.onNodeWithText("Training calendar", useUnmergedTree = true).assertExists()
-        tab("Profile"); rule.onNodeWithText("Modules", useUnmergedTree = true).assertExists()
-        tab("Home"); rule.onNodeWithText("Today", useUnmergedTree = true).assertExists()
+        tab("Planner"); waitForText("Add block")
+        tab("Career"); waitForText("Applied AI/ML Engineer by December 2027")
+        tab("Fitness"); waitForText("Training calendar")
+        tab("Profile"); waitForText("Modules")
+        tab("Home"); waitForText("Today")
     }
 
     @Test
