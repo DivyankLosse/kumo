@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Kumo the cub, kept inside the 66dp adaptive-icon safe zone. -->
+    <path android:fillColor="#E2A86B" android:pathData="M26,38 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0 M64,38 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <path android:fillColor="#F2B8A0" android:pathData="M30,39 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 M68,39 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
+    <path android:fillColor="#E2A86B" android:pathData="M30,57 a24,24 0 1,0 48,0 a24,24 0 1,0 -48,0" />
+    <path android:fillColor="#F49A9A" android:fillAlpha="0.6" android:pathData="M36.5,65 a3.5,2 0 1,0 7,0 a3.5,2 0 1,0 -7,0 M64.5,65 a3.5,2 0 1,0 7,0 a3.5,2 0 1,0 -7,0" />
+    <path android:fillColor="#F7DDB2" android:pathData="M47,66 a7,5 0 1,0 14,0 a7,5 0 1,0 -14,0" />
+    <path android:fillColor="#231A2C" android:pathData="M41.4,58 a3.6,4.4 0 1,0 7.2,0 a3.6,4.4 0 1,0 -7.2,0 M59.4,58 a3.6,4.4 0 1,0 7.2,0 a3.6,4.4 0 1,0 -7.2,0 M51.5,63.8 q2.5,-1.6 5,0 q-0.8,2.4 -2.5,2.4 q-1.7,0 -2.5,-2.4z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M45,56.2 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0 M63,56.2 a1.4,1.4 0 1,0 2.8,0 a1.4,1.4 0 1,0 -2.8,0" />
+    <path android:fillColor="#FFE08A" android:pathData="M40,77 h28 a3.2,3.2 0 0,1 0,6.4 h-28 a3.2,3.2 0 0,1 0,-6.4z M59,81 h6.5 l1.2,8 l-6.4,1.2z" />
+</vector>

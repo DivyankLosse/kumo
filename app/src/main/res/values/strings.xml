@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Kumo</string>
+    <string name="tagline">Build the person you want to become.</string>
+    <string name="widget_name">Kumo today</string>
+    <string name="widget_description">Today\'s tasks and progress</string>
+</resources>

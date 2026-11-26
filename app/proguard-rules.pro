@@ -1,0 +1,2 @@
+-keep class com.ascend.app.data.backup.** { *; }
+-keepclassmembers class * { @kotlinx.serialization.Serializable *; }
