@@ -153,6 +153,10 @@ fun HomeScreen(go: (String) -> Unit) {
                         RingLegend(cat.of(Category.FITNESS), "Protein", totals.proteinG?.let { "${it.toInt()} / ${p.proteinMinG}–${p.proteinMaxG} g" } ?: "Not logged")
                     }
                 }
+                val planNote = remember(tasks, p.sleepStartMin, p.wakeMin) {
+                    OverloadAnalyzer.analyze(tasks, SleepWindow(p.sleepStartMin, p.wakeMin)).messages().firstOrNull() ?: "Plan looks realistic"
+                }
+                Text(planNote, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 12.dp))
             }
         }
 

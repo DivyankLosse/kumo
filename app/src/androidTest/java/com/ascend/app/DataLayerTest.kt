@@ -67,7 +67,7 @@ class RepositoryTest {
     @Before fun setUp() = runTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), AscendDatabase::class.java).build()
         Seeder(db).seedIfNeeded()
-        planner = PlannerRepository(db, db.plannerDao()) {}
+        planner = PlannerRepository(db, db.plannerDao(), db.profileDao()) {}
         focus = FocusRepository(db, db.focusDao(), planner)
     }
 
@@ -173,7 +173,7 @@ class BackupAndPersistenceTest {
     @Test fun backupRestoresIntoFreshDatabase() = runTest {
         val source = Room.inMemoryDatabaseBuilder(ctx, AscendDatabase::class.java).build()
         Seeder(source).seedIfNeeded()
-        val planner = PlannerRepository(source, source.plannerDao()) {}
+        val planner = PlannerRepository(source, source.plannerDao(), source.profileDao()) {}
         planner.ensureDay(LocalDate.of(2027, 3, 1))
         source.nutritionDao().upsertFood(FoodEntryEntity(date = 1, meal = "Lunch", name = "Paneer", calories = null, proteinG = 20.0, carbsG = null, fatG = null, loggedAt = 1))
         val text = json.encodeToString(BackupBundle.serializer(), source.backupDao().snapshot(AscendDatabase.VERSION, 1))
