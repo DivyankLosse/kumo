@@ -62,7 +62,6 @@ fun Kumo(
             val vmi = (vmResult as? Result.Success)?.value ?: return fallback()
             LaunchedEffect(vmi, fur, equipped, pose) {
                 runCatching {
-                    Log.d(TAG, "apply pose=$pose fur=$fur gear=$equipped")
                     vmi.setNumber("pose", pose.ordinal.toFloat())
                     val c = furArgb(fur)
                     vmi.setColor("furBase", c[0]); vmi.setColor("furLight", c[1])

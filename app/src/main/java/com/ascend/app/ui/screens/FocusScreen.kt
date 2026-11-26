@@ -169,7 +169,7 @@ private fun FocusSetup(vm: FocusViewModel, fur: Fur, gear: Set<String>, name: St
             vm.category.value = Category.entries.first { it.label == l }
         })
         Spacer(Modifier.height(12.dp))
-        ChipRow(((if (com.ascend.app.BuildConfig.DEBUG) listOf(1) else emptyList()) + listOf(15, 25, 45, 60, 90, 120)).map { "$it min" }, "$minutes min", { vm.minutes.value = it.removeSuffix(" min").toInt() })
+        ChipRow(listOf(15, 25, 45, 60, 90, 120).map { "$it min" }, "$minutes min", { vm.minutes.value = it.removeSuffix(" min").toInt() })
         Spacer(Modifier.height(20.dp))
         Button(
             onClick = vm::start, shape = CircleShape,
