@@ -21,7 +21,9 @@ Kumo (renamed from the working title "ASCEND 2027") is a native Android personal
 - `DESIGN.md` and `PRODUCT.md`: design system and product brief
 
 ## 2. Debug APK
-`app/build/outputs/apk/debug/app-debug.apk` (minSdk 26, target/compile 35)
+CI: every push to `main` builds the APK in GitHub Actions. Download it from the run's **kumo-debug-apk** artifact. Pushing a `v*` tag also attaches it to a GitHub Release.
+
+Local: `app/build/outputs/apk/debug/app-debug.apk` (minSdk 26, target/compile 35)
 
 ## 3. Build
 Prerequisites: JDK 17 and an Android SDK with platform 36 (compileSdk 36, targetSdk 35, AGP 8.13.2, Gradle 8.13; rive-android 11.x requires compileSdk 36) (`brew install openjdk@17` plus `android-commandlinetools`).
