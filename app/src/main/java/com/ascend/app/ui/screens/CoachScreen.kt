@@ -1,113 +1,157 @@
 package com.ascend.app.ui.screens
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.ascend.app.data.coach.CoachMessage
+import com.ascend.app.data.coach.COACH_PROMPT_VERSION
+import com.ascend.app.data.coach.CoachFacts
+import com.ascend.app.data.coach.CoachFactsLoader
+import com.ascend.app.data.coach.CoachItem
 import com.ascend.app.data.coach.CoachRequest
 import com.ascend.app.data.coach.CoachResult
+import com.ascend.app.data.coach.CoachTask
+import com.ascend.app.data.coach.Fact
+import com.ascend.app.data.coach.TemplateCoach
 import com.ascend.app.di.AppContainer
-import com.ascend.app.domain.Dates
-import com.ascend.app.domain.Metrics
+import com.ascend.app.domain.CitationValidator
 import com.ascend.app.ui.components.*
 import com.ascend.app.ui.navigation.Routes
 import com.ascend.app.ui.navigation.appViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.Locale
 
-data class ChatLine(val role: String, val text: String, val error: Boolean = false)
+sealed interface AiState {
+    data object Idle : AiState
+    data object Loading : AiState
+    data class Ready(val items: List<CoachItem>, val hidden: Int) : AiState
+    data class Error(val reason: String) : AiState
+}
 
 class CoachViewModel(private val c: AppContainer) : BaseViewModel() {
-    val proxyUrl = c.settings.settings.map { it.coachProxyUrl }.state("")
-    val lines = MutableStateFlow<List<ChatLine>>(emptyList())
-    val sending = MutableStateFlow(false)
+    private val loader = CoachFactsLoader(c.planner, c.focus, c.fitness, c.nutrition, c.checklists, c.profile)
 
-    /** Factual snapshot from the user's own data, sent as context. Never includes photos or recordings. */
-    private suspend fun context(): String {
-        val today = Dates.today()
-        val tasks = c.planner.day(today.toEpochDay())
-        val focus = c.focus.observeSessionsBetween(Dates.startOfDayMs(today), Dates.endOfDayMs(today)).first()
-        val p = c.profile.get()
-        return buildString {
-            p?.let { append("Goal: ${it.careerGoal}. ${it.education}. ") }
-            append("Today ${today}: ${Metrics.completionPercent(tasks)}% of ${tasks.size} blocks done; ")
-            append("career ${Metrics.careerMinutes(tasks, focus)} min of ${(p?.careerHoursDaily ?: 4.0) * 60} min target.")
+    val proxyUrl = c.settings.settings.map { it.coachProxyUrl }.state("")
+    val facts = MutableStateFlow<CoachFacts?>(null)
+    val ai = MutableStateFlow<Map<CoachTask, AiState>>(emptyMap())
+
+    init {
+        io {
+            c.awaitReady()
+            facts.value = loader.load()
         }
     }
 
-    fun send(text: String) = io {
-        if (text.isBlank() || sending.value) return@io
-        val history = lines.value.filterNot { it.error } + ChatLine("user", text.trim())
-        lines.value = lines.value + ChatLine("user", text.trim())
-        sending.value = true
-        val result = c.coach.ask(c.settings.current().coachProxyUrl, CoachRequest(history.map { CoachMessage(it.role, it.text) }, context()))
-        lines.value = lines.value + when (result) {
-            is CoachResult.Reply -> ChatLine("assistant", result.text)
-            CoachResult.NotConfigured -> ChatLine("system", "The coach isn't set up. Add your proxy URL in Settings.", error = true)
-            is CoachResult.Failed -> ChatLine("system", "No reply: ${result.reason}. Nothing was generated on the device.", error = true)
+    fun ask(task: CoachTask) = io {
+        val sheet = facts.value ?: return@io
+        if (ai.value[task] == AiState.Loading) return@io
+        ai.value = ai.value + (task to AiState.Loading)
+        val request = CoachRequest(COACH_PROMPT_VERSION, Locale.getDefault().toLanguageTag(), sheet.facts, sheet.constraints)
+        val state = when (val result = c.coach.ask(c.settings.current().coachProxyUrl, task, request)) {
+            is CoachResult.Reply -> {
+                val checked = CitationValidator.validate(result.response.items, sheet.facts)
+                AiState.Ready(checked.kept, checked.dropped)
+            }
+            CoachResult.NotConfigured -> AiState.Error("The coach isn't set up. Add your proxy URL in Settings.")
+            is CoachResult.Failed -> AiState.Error("No reply: ${result.reason}. Nothing was generated on the device.")
         }
-        sending.value = false
+        ai.value = ai.value + (task to state)
     }
 }
+
+private val cards = listOf(
+    CoachTask.WEEKLY_REVIEW to "Weekly review",
+    CoachTask.ROADMAP_PLAN to "Plan my roadmap week",
+    CoachTask.REFLECTION_PROMPTS to "Reflection prompts",
+)
 
 @Composable
 fun CoachScreen(onBack: () -> Unit, go: (String) -> Unit) {
     val vm = appViewModel { CoachViewModel(it) }
     val url by vm.proxyUrl.collectAsState()
-    val lines by vm.lines.collectAsState()
-    val sending by vm.sending.collectAsState()
-    var input by remember { mutableStateOf("") }
+    val sheet by vm.facts.collectAsState()
+    val ai by vm.ai.collectAsState()
 
-    Box(Modifier.fillMaxSize()) {
-        DetailScreen("AI Coach", onBack) {
-            if (url.isBlank()) {
-                item {
-                    AscendCard {
-                        Text("Coach is off", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "Kumo works fully offline. The optional coach talks only to a backend proxy you run, so no AI keys ever live in the app. Until it's set up, the coach stays silent rather than making things up.",
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                        Button(onClick = { go(Routes.SETTINGS) }, shape = CircleShape, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open Settings") }
-                    }
+    DetailScreen("AI Coach", onBack) {
+        if (url.isBlank()) {
+            item {
+                AscendCard {
+                    Text("Coach is off", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "Kumo works fully offline. The optional coach talks only to a backend proxy you run, so no AI keys ever live in the app. Until it's set up, the coach stays silent rather than making things up.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                    Button(onClick = { go(Routes.SETTINGS) }, shape = CircleShape, modifier = Modifier.heightIn(min = 48.dp)) { Text("Open Settings") }
                 }
-            } else {
-                item { Text("Connected to $url", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (lines.isEmpty()) item { EmptyHint("Ask about your plan, your roadmap, or how to recover a missed day.") }
-                items(lines.size) { i ->
-                    val l = lines[i]
-                    val mine = l.role == "user"
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = when {
-                                l.error -> MaterialTheme.colorScheme.errorContainer
-                                mine -> MaterialTheme.colorScheme.primaryContainer
-                                else -> MaterialTheme.colorScheme.surfaceContainerHigh
-                            },
-                            modifier = Modifier.widthIn(max = 320.dp),
-                        ) { Text(l.text, Modifier.padding(14.dp), style = MaterialTheme.typography.bodyMedium) }
-                    }
-                }
-                if (sending) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
+            }
+        } else {
+            item { Text("Connected to $url", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        val current = sheet
+        if (current == null) {
+            item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 8.dp)) }
+        } else {
+            items(cards.size) { i ->
+                val (task, title) = cards[i]
+                TaskCard(title, task, current.facts, ai[task] ?: AiState.Idle, askEnabled = url.isNotBlank()) { vm.ask(task) }
             }
         }
-        if (url.isNotBlank()) {
-            Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                Row(Modifier.navigationBarsPadding().imePadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(input, { input = it }, placeholder = { Text("Message your coach") }, modifier = Modifier.weight(1f), maxLines = 4, shape = RoundedCornerShape(24.dp))
-                    Spacer(Modifier.width(8.dp))
-                    FilledIconButton(onClick = { vm.send(input); input = "" }, enabled = input.isNotBlank() && !sending, modifier = Modifier.size(52.dp)) {
-                        Icon(Icons.AutoMirrored.Rounded.Send, "Send")
+    }
+}
+
+@Composable
+private fun TaskCard(title: String, task: CoachTask, facts: List<Fact>, ai: AiState, askEnabled: Boolean, onAsk: () -> Unit) {
+    val factsById = remember(facts) { facts.associateBy { it.id } }
+    AscendCard {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        val shown = (ai as? AiState.Ready)?.items ?: TemplateCoach.items(task, facts)
+        Text(
+            if (ai is AiState.Ready) "From your coach, checked against your data" else "Worked out on this device",
+            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
+        if (shown.isEmpty()) EmptyHint("Nothing to show yet.")
+        shown.forEach { ItemRow(it, factsById) }
+        if (ai is AiState.Ready && ai.hidden > 0) {
+            Text(
+                "${ai.hidden} ${if (ai.hidden == 1) "claim" else "claims"} hidden: numbers not found in your data",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (ai is AiState.Error) {
+            Text(ai.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (ai is AiState.Loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp))
+        OutlinedButton(
+            onClick = onAsk,
+            enabled = askEnabled && ai != AiState.Loading,
+            shape = CircleShape,
+            modifier = Modifier.padding(top = 12.dp).heightIn(min = 48.dp),
+        ) { Text("Ask coach") }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ItemRow(item: CoachItem, factsById: Map<String, Fact>) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Text(item.text, style = MaterialTheme.typography.bodyMedium)
+        val cited = item.cites.mapNotNull { factsById[it] }
+        if (cited.isNotEmpty()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                cited.forEach { fact ->
+                    Surface(shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                        Text(
+                            fact.kind.replace('_', ' '),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
                     }
                 }
             }
