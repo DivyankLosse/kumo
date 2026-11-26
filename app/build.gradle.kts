@@ -11,7 +11,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.ascend.app"
+        // Permanent store identity (decided for v1.0.1); the Kotlin package stays com.ascend.app.
+        applicationId = "app.kumo.planner"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -20,8 +21,23 @@ android {
         vectorDrawables { useSupportLibrary = true }
     }
 
+    // Release signing comes from CI secrets or ~/.gradle/gradle.properties, never from the repo.
+    // Without them, release builds fall back to the debug key so R8 output can still be smoke-tested locally.
+    val keystorePath = providers.environmentVariable("KUMO_KEYSTORE_PATH").orElse(providers.gradleProperty("KUMO_KEYSTORE_PATH")).orNull
+    signingConfigs {
+        if (keystorePath != null) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = providers.environmentVariable("KUMO_STORE_PASSWORD").orElse(providers.gradleProperty("KUMO_STORE_PASSWORD")).get()
+                keyAlias = providers.environmentVariable("KUMO_KEY_ALIAS").orElse(providers.gradleProperty("KUMO_KEY_ALIAS")).getOrElse("kumo")
+                keyPassword = providers.environmentVariable("KUMO_KEY_PASSWORD").orElse(providers.gradleProperty("KUMO_KEY_PASSWORD")).get()
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

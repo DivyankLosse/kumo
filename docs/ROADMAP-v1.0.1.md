@@ -4,6 +4,37 @@ Written 2026-11-26 against commit `a8e457a`. The app was renamed from "ASCEND 20
 
 ---
 
+## 0. Revised plan (2026-11-26, after external reviews)
+
+Product direction: **personal-first, built for everyone; practical personality**, with Kumo as the differentiator rather than the point. Promise: *make meaningful progress without needing a perfect day.*
+
+Corrections to this document, accepted from the Gemini and ChatGPT reviews:
+- **Overload math:** measure flexible minutes against *discretionary* time (the awake window minus fixed college, work and commute blocks), not the whole awake window.
+- **Coach contract:** `CoachClient` still speaks the old `POST /v1/coach {messages}→{reply}`. Migrate it to the per-task structured contract (§4.3) before any backend work. Keep one protocol, not two.
+- The **sleep window** is hardcoded in `ScheduleRules`; it must come from the profile.
+- **CI** ran only JVM tests; it now runs the instrumented suite on an emulator too.
+- **App ID** is fixed at `app.kumo.planner`. Release signing uses CI secrets; the keystore is created and held by the owner.
+
+### v1.0.1, "The daily loop works" (scope tightened)
+1. Release signing (AAB + APK via CI secrets), `app.kumo.planner`, instrumented tests in CI, R8 smoke test. *(wired)*
+2. **Persistent focus timer**: an absolute deadline in DataStore, surviving rotation and process death, completing exactly once, with an injectable clock.
+3. **Quick actions**: notification Done / Snooze 15; widget "+250 ml", "Next block done" and "Focus". These write straight to Room, idempotently.
+4. **Notification diet**: 3 defaults (morning, task/focus, evening) plus quiet hours; no reminders for completed tasks.
+5. **Overload analyzer** (discretionary capacity): ≥85% booked, buffer < 30 min, focus run > 180 min, weekly target infeasible.
+6. **Smart Day Recovery**: Recover / Shorten / Defer / Drop, user-approved, with a single-step undo; **Minimum Viable Day** keeps 1–3 essentials (priority 2) and shrinks the rest. Never touches fixed blocks or sleep.
+7. **Sleep window from the profile** across rules, generator and recovery.
+8. **Coach client on the structured contract**: `FactSheetBuilder` (shared with Analytics), a citation validator, offline template fallback. No backend yet.
+
+### v1.0.2, "Fits anyone"
+Onboarding + `ScheduleTemplateGenerator` (property-tested), the v2→v3 migration (seasons, daily_checkins, weekly_reviews, focus-session quality), energy check-in, focus check-in (Nailed it / Distracted / Too long), weekly review, and a Quick Add sheet.
+
+### v1.1, "Less typing, more outcomes"
+Saved meals → Health Connect → calendar import → spaced repetition (open-source FSRS port) → Career proof of work → module pin/hide → media backup → structured AI coach (backend live) → seasons review.
+
+**Rule:** don't build releases in parallel; use each release daily for 14 days before starting the next.
+
+---
+
 ## 1. v1.0.0 release readiness
 
 | Check | Result |
