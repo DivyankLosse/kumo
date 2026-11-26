@@ -1,6 +1,5 @@
 package com.ascend.app.ui.screens
 
-import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
@@ -32,7 +31,11 @@ import androidx.lifecycle.viewModelScope
 import com.ascend.app.data.local.PlannedTaskEntity
 import com.ascend.app.data.repository.FocusRepository
 import com.ascend.app.di.AppContainer
+import com.ascend.app.domain.ActiveFocus
 import com.ascend.app.domain.Category
+import com.ascend.app.domain.Clock
+import com.ascend.app.domain.FocusTimer
+import com.ascend.app.domain.SystemWallClock
 import com.ascend.app.domain.Fur
 import com.ascend.app.ui.companion.*
 import com.ascend.app.ui.components.ActivityRings
@@ -48,56 +51,94 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 sealed interface FocusPhase {
+    data object Loading : FocusPhase
     data object Setup : FocusPhase
-    data class Running(val startedAtElapsed: Long, val accumulatedMs: Long, val paused: Boolean) : FocusPhase
+    data class Running(val state: ActiveFocus) : FocusPhase {
+        val paused: Boolean get() = state.paused
+    }
     data class Done(val outcome: FocusRepository.SessionOutcome, val plannedMin: Int, val actualSec: Int, val completed: Boolean) : FocusPhase
 }
 
-class FocusViewModel(private val c: AppContainer, taskId: Long?, category: String, minutes: Int?) : BaseViewModel() {
+class FocusViewModel(
+    private val c: AppContainer, taskId: Long?, category: String, minutes: Int?,
+    val clock: Clock = SystemWallClock,
+) : BaseViewModel() {
     val task = MutableStateFlow<PlannedTaskEntity?>(null)
     val category = MutableStateFlow(Category.entries.firstOrNull { it.name == category && it.focusable } ?: Category.CAREER)
     val minutes = MutableStateFlow(minutes ?: 45)
-    val phase = MutableStateFlow<FocusPhase>(FocusPhase.Setup)
+    val phase = MutableStateFlow<FocusPhase>(FocusPhase.Loading)
     val companion = c.focus.observeCompanion().state(null)
     val gear = c.focus.observeGear().map { l -> l.filter { it.equipped }.map { it.itemId }.toSet() }.state(emptySet())
-    private val linkedTaskId = taskId
+    private var linkedTaskId = taskId
 
     init {
-        if (taskId != null) io {
-            task.value = c.planner.task(taskId)?.also { t ->
-                if (Category.of(t.category).focusable) this.category.value = Category.of(t.category)
-            }
+        io { restore() }
+    }
+
+    private suspend fun restore() {
+        val saved = c.focusStore.current()
+        if (saved == null) {
+            phase.value = FocusPhase.Setup
+            linkedTaskId?.let { loadTask(it, adoptCategory = true) }
+            return
+        }
+        linkedTaskId = saved.taskId
+        category.value = Category.of(saved.category)
+        minutes.value = saved.plannedMinutes
+        saved.taskId?.let { loadTask(it, adoptCategory = false) }
+        phase.value = FocusPhase.Running(saved)
+        if (FocusTimer.isComplete(saved, clock.nowMs())) finish(completed = true)
+    }
+
+    private suspend fun loadTask(id: Long, adoptCategory: Boolean) {
+        task.value = c.planner.task(id)?.also { t ->
+            if (adoptCategory && Category.of(t.category).focusable) category.value = Category.of(t.category)
         }
     }
 
     fun start() {
-        phase.value = FocusPhase.Running(SystemClock.elapsedRealtime(), 0, false)
+        if (phase.value !is FocusPhase.Setup) return
+        val state = ActiveFocus(
+            sessionKey = UUID.randomUUID().toString(), category = category.value.name, taskId = linkedTaskId,
+            plannedMinutes = minutes.value, startedAtMs = clock.nowMs(), pausedAtMs = null, pausedTotalMs = 0,
+        )
+        phase.value = FocusPhase.Running(state)
+        io { c.focusStore.save(state) }
     }
 
-    fun elapsedMs(p: FocusPhase.Running): Long =
-        p.accumulatedMs + if (p.paused) 0 else SystemClock.elapsedRealtime() - p.startedAtElapsed
+    fun elapsedMs(p: FocusPhase.Running): Long = FocusTimer.elapsedMs(p.state, clock.nowMs())
 
     fun togglePause() {
         val p = phase.value as? FocusPhase.Running ?: return
-        phase.value = if (p.paused) p.copy(startedAtElapsed = SystemClock.elapsedRealtime(), paused = false)
-        else p.copy(accumulatedMs = elapsedMs(p), paused = true)
+        val now = clock.nowMs()
+        val next = if (p.paused) FocusTimer.resume(p.state, now) else FocusTimer.pause(p.state, now)
+        phase.value = FocusPhase.Running(next)
+        io { c.focusStore.save(next) }
     }
 
     fun finish(completed: Boolean) {
         val p = phase.value as? FocusPhase.Running ?: return
-        val actualSec = (elapsedMs(p) / 1000).toInt().coerceAtMost(minutes.value * 60)
-        phase.value = FocusPhase.Setup
+        val actualSec = (FocusTimer.elapsedMs(p.state, clock.nowMs()) / 1000).toInt()
+        phase.value = FocusPhase.Loading
         viewModelScope.launch {
+            if (!c.focusStore.claimFinish(p.state.sessionKey)) {
+                phase.value = FocusPhase.Setup
+                return@launch
+            }
             val rewards = c.settings.current().rewardsEnabled
-            val outcome = c.focus.finishSession(category.value.name, linkedTaskId, minutes.value, actualSec, completed, rewards)
-            if (completed && linkedTaskId != null) task.value?.let { if (!it.completed) c.planner.toggle(it) }
-            phase.value = FocusPhase.Done(outcome, minutes.value, actualSec, completed)
+            val outcome = c.focus.finishSession(p.state.category, p.state.taskId, p.state.plannedMinutes, actualSec, completed, rewards)
+            if (completed && p.state.taskId != null) task.value?.let { if (!it.completed) c.planner.toggle(it) }
+            phase.value = FocusPhase.Done(outcome, p.state.plannedMinutes, actualSec, completed)
         }
     }
 
-    fun discard() { phase.value = FocusPhase.Setup }
+    fun discard() {
+        phase.value = FocusPhase.Setup
+        io { c.focusStore.clear() }
+    }
 }
 
 @Composable
@@ -123,6 +164,7 @@ fun FocusScreen(initialCategory: String, taskId: Long?, initialMinutes: Int?, on
             label = "phase",
         ) { _ ->
             when (val p = phase) {
+                FocusPhase.Loading -> Box(Modifier.fillMaxSize())
                 FocusPhase.Setup -> FocusSetup(vm, fur, gear, companion?.name ?: "Kumo", onBack)
                 is FocusPhase.Running -> FocusRunning(vm, p, fur, gear) { confirmLeave = true }
                 is FocusPhase.Done -> FocusCelebration(p, fur, gear, companion?.name ?: "Kumo", onDone = onBack, onPark = { go(Routes.COMPANION) })

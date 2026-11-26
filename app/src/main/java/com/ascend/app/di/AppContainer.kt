@@ -4,6 +4,7 @@ import android.content.Context
 import com.ascend.app.data.backup.BackupManager
 import com.ascend.app.data.coach.CoachClient
 import com.ascend.app.data.local.AscendDatabase
+import com.ascend.app.data.prefs.FocusStore
 import com.ascend.app.data.prefs.SettingsStore
 import com.ascend.app.data.repository.*
 import com.ascend.app.widget.TodayWidget
@@ -14,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 /** Manual dependency graph; one instance per process, owned by [com.ascend.app.AscendApp]. */
 class AppContainer(private val context: Context, val db: AscendDatabase = AscendDatabase.build(context)) {
     val settings = SettingsStore(context)
+    val focusStore = FocusStore(context)
     val profile = ProfileRepository(db.profileDao())
     val planner = PlannerRepository(db, db.plannerDao()) { refreshWidget() }
     val focus = FocusRepository(db, db.focusDao(), planner)

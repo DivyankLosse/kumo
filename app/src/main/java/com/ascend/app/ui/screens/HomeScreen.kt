@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.ascend.app.data.local.*
+import androidx.compose.ui.platform.LocalContext
+import com.ascend.app.AscendApp
 import com.ascend.app.di.AppContainer
 import com.ascend.app.domain.*
 import com.ascend.app.ui.companion.BearCub
@@ -35,6 +37,7 @@ import com.ascend.app.ui.theme.LocalCategoryColors
 import com.ascend.app.ui.theme.LocalIsDark
 import com.ascend.app.ui.theme.Palette
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import java.time.LocalDate
 
@@ -238,6 +241,27 @@ private fun RingLegend(color: Color, label: String, value: String) {
     }
 }
 
+@Composable
+private fun FocusInProgressChip(go: (String) -> Unit) {
+    val store = (LocalContext.current.applicationContext as AscendApp).container.focusStore
+    val active by store.active.collectAsState(initial = null)
+    val session = active ?: return
+    var now by remember { mutableLongStateOf(SystemWallClock.nowMs()) }
+    LaunchedEffect(session) {
+        while (true) {
+            now = SystemWallClock.nowMs()
+            delay(1000)
+        }
+    }
+    val left = (FocusTimer.remainingMs(session, now) / 1000).toInt()
+    AssistChip(
+        onClick = { go(Routes.focus()) },
+        label = { Text("Focus in progress \u00b7 %02d:%02d left".format(left / 60, left % 60)) },
+        leadingIcon = { Icon(Icons.Rounded.Timer, null, Modifier.size(18.dp)) },
+        modifier = Modifier.padding(bottom = 12.dp).heightIn(min = 48.dp),
+    )
+}
+
 /** Mascot hero: Kumo idles on a dawn ridge; pick a length and start a focus session. */
 @Composable
 private fun CompanionFocusCard(fur: Fur, gear: Set<String>, name: String, points: Int, go: (String) -> Unit) {
@@ -277,6 +301,7 @@ private fun CompanionFocusCard(fur: Fur, gear: Set<String>, name: String, points
             }
             Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.padding(16.dp)) {
+                    FocusInProgressChip(go)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                         listOf(25, 45, 60, 90).forEach { m ->
                             FilterChip(
