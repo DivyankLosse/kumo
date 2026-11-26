@@ -42,5 +42,9 @@
                 android:resource="@xml/today_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".work.QuickActionReceiver"
+            android:exported="false" />
+
     </application>
 </manifest>

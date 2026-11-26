@@ -7,7 +7,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
+import androidx.glance.layout.Alignment
+import androidx.glance.action.Action
+import androidx.glance.action.ActionParameters
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.action.ActionCallback
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.layout.Box
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.LinearProgressIndicator
@@ -30,6 +36,8 @@ import androidx.glance.unit.ColorProvider
 import com.ascend.app.AscendApp
 import com.ascend.app.MainActivity
 import com.ascend.app.data.local.PlannedTaskEntity
+import com.ascend.app.data.local.WaterEntryEntity
+import com.ascend.app.work.QuickActionLogic
 import com.ascend.app.domain.Dates
 import com.ascend.app.domain.Metrics
 import com.ascend.app.domain.ScheduleRules
@@ -79,7 +87,47 @@ class TodayWidget : GlanceAppWidget() {
                     }
                 }
             }
+            Spacer(GlanceModifier.defaultWeight())
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                WidgetButton("+water", actionRunCallback<AddWaterAction>(), GlanceModifier.defaultWeight())
+                Spacer(GlanceModifier.width(6.dp))
+                WidgetButton("Next done", actionRunCallback<CompleteNextAction>(), GlanceModifier.defaultWeight())
+                Spacer(GlanceModifier.width(6.dp))
+                WidgetButton("Focus", actionStartActivity<MainActivity>(), GlanceModifier.defaultWeight())
+            }
         }
+    }
+
+    @Composable
+    private fun WidgetButton(label: String, onClick: Action, modifier: GlanceModifier) {
+        Box(
+            modifier.height(48.dp).background(ColorProvider(Color(0xFF2A3150))).cornerRadius(16.dp).clickable(onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(label, style = TextStyle(color = ColorProvider(Color(0xFFFFE08A)), fontSize = 12.sp, fontWeight = FontWeight.Medium), maxLines = 1)
+        }
+    }
+}
+
+class AddWaterAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val c = (context.applicationContext as AscendApp).container
+        c.awaitReady()
+        val ml = c.settings.current().glassMl
+        c.nutrition.insertWater(WaterEntryEntity(date = Dates.todayEpoch(), ml = ml, loggedAt = System.currentTimeMillis()))
+        TodayWidget().update(context, glanceId)
+    }
+}
+
+class CompleteNextAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val c = (context.applicationContext as AscendApp).container
+        c.awaitReady()
+        val next = QuickActionLogic.nextBlock(c.planner.day(Dates.todayEpoch()), Dates.nowMinutes())
+        if (QuickActionLogic.shouldMarkDone(next)) {
+            c.db.plannerDao().setCompleted(next!!.id, true, System.currentTimeMillis())
+        }
+        TodayWidget().update(context, glanceId)
     }
 }
 

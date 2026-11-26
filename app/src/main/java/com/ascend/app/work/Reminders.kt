@@ -43,7 +43,7 @@ enum class ReminderType(val title: String, val hour: Int, val minute: Int, val r
     SUNSCREEN("Sunscreen", 7, 20, 24),
     HYDRATION("Hydration", 9, 0, 3),
     POSTURE("Posture break", 10, 0, 2),
-    NIGHT("Night routine", 22, 10, 24),
+    NIGHT("Evening wind-down", 22, 10, 24),
     WEEKLY_REVIEW("Weekly review", 19, 55, 24 * 7, DayOfWeek.SUNDAY),
 }
 
@@ -63,13 +63,13 @@ object Notifier {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
-    fun show(context: Context, id: Int, channel: String, title: String, text: String) {
+    fun show(context: Context, id: Int, channel: String, title: String, text: String, actions: List<Pair<String, PendingIntent>> = emptyList()) {
         if (!canPost(context)) return
         val intent = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        val n = NotificationCompat.Builder(context, channel)
+        val builder = NotificationCompat.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(0xFFFFE08A.toInt())
             .setContentTitle(title)
@@ -77,7 +77,8 @@ object Notifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(intent)
             .setAutoCancel(true)
-            .build()
+        actions.forEach { (label, pi) -> builder.addAction(0, label, pi) }
+        val n = builder.build()
         try {
             NotificationManagerCompat.from(context).notify(id, n)
         } catch (_: SecurityException) {
@@ -91,7 +92,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val type = inputData.getString(KEY_TYPE)?.let { runCatching { ReminderType.valueOf(it) }.getOrNull() } ?: return Result.success()
         val app = applicationContext as AscendApp
         val settings = app.container.settings.current()
-        if (!settings.remindersEnabled || type.name in settings.disabledReminders) return Result.success()
+        if (!settings.remindersEnabled || type.name !in settings.enabledReminders) return Result.success()
         val now = LocalTime.now()
         val nowMin = now.hour * 60 + now.minute
         // Interval reminders stay quiet outside waking, non-college hours.
@@ -120,10 +121,16 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
             }
             ReminderType.SUNSCREEN -> "Sunscreen before you head out. Reapply around lunch if you're outdoors."
             ReminderType.POSTURE -> "Stand up, roll the shoulders, and do 10 chin tucks."
-            ReminderType.NIGHT -> "Night routine in 5 minutes. Screens down by 22:30."
+            ReminderType.NIGHT -> "Evening wind-down in 5 minutes. Screens down by 22:30."
             ReminderType.WEEKLY_REVIEW -> "Sunday review: look back at the week and set next week's deliverables."
         }
-        Notifier.show(applicationContext, 1000 + type.ordinal, Notifier.CHANNEL_ROUTINE, type.title, text)
+        val notificationId = 1000 + type.ordinal
+        if (!QuickActionLogic.isQuietTime(nowMin, settings.quietStartMin, settings.quietEndMin)) {
+            val actions = if (type == ReminderType.HYDRATION) {
+                listOf("+${settings.glassMl} ml" to QuickActionReceiver.pendingIntent(applicationContext, QuickActionReceiver.ACTION_WATER, notificationId))
+            } else emptyList()
+            Notifier.show(applicationContext, notificationId, Notifier.CHANNEL_ROUTINE, type.title, text, actions)
+        }
         if (type == ReminderType.MORNING) ReminderScheduler.scheduleTaskReminders(applicationContext, tasks.filter { it.reminder && !it.completed }.map { Triple(it.id, it.title, it.startMin) })
         return Result.success()
     }
@@ -134,14 +141,24 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
 class TaskReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as AscendApp
-        if (!app.container.settings.current().remindersEnabled) return Result.success()
+        val settings = app.container.settings.current()
+        if (!settings.remindersEnabled) return Result.success()
+        if (QuickActionLogic.isQuietTime(Dates.nowMinutes(), settings.quietStartMin, settings.quietEndMin)) return Result.success()
         val id = inputData.getLong("id", 0)
         val task = app.container.planner.task(id) ?: return Result.success()
         if (task.completed || task.date != Dates.todayEpoch()) return Result.success()
-        Notifier.show(applicationContext, (2000 + id % 100000).toInt(), Notifier.CHANNEL_TASKS, task.title,
-            "Starts around ${ScheduleRules.format(task.startMin)}.")
+        val notificationId = (2000 + id % 100000).toInt()
+        val prefix = if (inputData.getBoolean(KEY_SNOOZED, false)) "Snoozed: starts" else "Starts"
+        Notifier.show(applicationContext, notificationId, Notifier.CHANNEL_TASKS, task.title,
+            "$prefix around ${ScheduleRules.format(task.startMin)}.",
+            listOf(
+                "Done" to QuickActionReceiver.pendingIntent(applicationContext, QuickActionReceiver.ACTION_DONE, notificationId, id),
+                "Snooze 15 min" to QuickActionReceiver.pendingIntent(applicationContext, QuickActionReceiver.ACTION_SNOOZE, notificationId, id),
+            ))
         return Result.success()
     }
+
+    companion object { const val KEY_SNOOZED = "snoozed" }
 }
 
 object ReminderScheduler {
