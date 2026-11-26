@@ -15,7 +15,7 @@ import kotlinx.coroutines.sync.withLock
 class AppContainer(private val context: Context, val db: AscendDatabase = AscendDatabase.build(context)) {
     val settings = SettingsStore(context)
     val profile = ProfileRepository(db.profileDao())
-    val planner = PlannerRepository(db, db.plannerDao()) { refreshWidget() }
+    val planner = PlannerRepository(db, db.plannerDao(), db.profileDao()) { refreshWidget() }
     val focus = FocusRepository(db, db.focusDao(), planner)
     val career = CareerRepository(db.careerDao())
     val notes = NotesRepository(db.notesDao())

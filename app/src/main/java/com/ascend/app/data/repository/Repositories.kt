@@ -3,7 +3,13 @@ package com.ascend.app.data.repository
 import androidx.room.withTransaction
 import com.ascend.app.data.local.*
 import com.ascend.app.domain.Dates
+import com.ascend.app.domain.BatchProposal
 import com.ascend.app.domain.Fur
+import com.ascend.app.domain.Recovery
+import com.ascend.app.domain.RecoveryOption
+import com.ascend.app.domain.RecoveryProposal
+import com.ascend.app.domain.SleepWindow
+import com.ascend.app.domain.TaskChange
 import com.ascend.app.domain.Rewards
 import com.ascend.app.domain.ScheduleRules
 import com.ascend.app.domain.SeedData
@@ -24,6 +30,7 @@ sealed interface TaskResult {
 class PlannerRepository(
     private val db: AscendDatabase,
     private val dao: PlannerDao,
+    private val profileDao: ProfileDao,
     private val onChanged: suspend () -> Unit,
 ) : PlannerDao by dao {
 
@@ -45,9 +52,12 @@ class PlannerRepository(
 
     suspend fun ensureRange(from: LocalDate, days: Int) = repeat(days) { ensureDay(from.plusDays(it.toLong())) }
 
+    suspend fun sleepWindow(): SleepWindow =
+        profileDao.get()?.let { SleepWindow(it.sleepStartMin, it.wakeMin) } ?: SleepWindow.DEFAULT
+
     suspend fun save(task: PlannedTaskEntity): TaskResult {
         if (task.endMin <= task.startMin) return TaskResult.InvalidTime
-        if (!ScheduleRules.isWithinAwakeWindow(task.startMin, task.endMin)) return TaskResult.InsideSleepWindow
+        if (!ScheduleRules.isWithinAwakeWindow(task.startMin, task.endMin, sleepWindow())) return TaskResult.InsideSleepWindow
         val id = dao.upsertTask(task)
         onChanged()
         return TaskResult.Ok(if (task.id == 0L) id else task.id)
@@ -55,7 +65,7 @@ class PlannerRepository(
 
     /** Saves a recurring weekly block; it applies to days not yet opened. */
     suspend fun saveTemplate(template: TaskTemplateEntity): TaskResult {
-        if (!ScheduleRules.isWithinAwakeWindow(template.startMin, template.endMin)) return TaskResult.InsideSleepWindow
+        if (!ScheduleRules.isWithinAwakeWindow(template.startMin, template.endMin, sleepWindow())) return TaskResult.InsideSleepWindow
         return TaskResult.Ok(dao.upsertTemplate(template))
     }
 
@@ -72,26 +82,50 @@ class PlannerRepository(
 
     /**
      * Moves a missed task to the next free slot today (after now), else the earliest slot on
-     * following days, never into the 22:30–06:30 sleep window.
+     * following days, never into the protected sleep window.
      */
     suspend fun reschedule(task: PlannedTaskEntity, today: LocalDate = Dates.today(), nowMin: Int = Dates.nowMinutes()): TaskResult {
-        val duration = task.endMin - task.startMin
-        for (offset in 0..6) {
-            val day = today.plusDays(offset.toLong())
-            ensureDay(day)
-            val busy = dao.day(day.toEpochDay()).filter { it.id != task.id && !it.skipped }.map { it.startMin to it.endMin }
-            val notBefore = if (offset == 0) nowMin else ScheduleRules.WAKE_MIN
-            val slot = ScheduleRules.nextFreeSlot(busy, duration, notBefore) ?: continue
-            dao.upsertTask(
-                task.copy(
-                    date = day.toEpochDay(), startMin = slot, endMin = slot + duration,
-                    rescheduledFromDate = task.rescheduledFromDate ?: task.date, completed = false, completedAt = null,
-                ),
-            )
-            onChanged()
-            return TaskResult.Ok(task.id)
+        val proposal = proposeRecovery(RecoveryOption.RECOVER, task, today, nowMin) ?: return TaskResult.NoFreeSlot
+        applyChanges(listOf(proposal.change))
+        return TaskResult.Ok(task.id)
+    }
+
+    /** Reads what the domain needs to propose a recovery; writes nothing apart from lazily materializing days. */
+    private suspend fun daysFrom(today: LocalDate): (Long) -> List<PlannedTaskEntity> {
+        (0..Recovery.LOOKAHEAD_DAYS).forEach { ensureDay(today.plusDays(it.toLong())) }
+        val byDay = (0..Recovery.LOOKAHEAD_DAYS).associate {
+            val epoch = today.toEpochDay() + it
+            epoch to dao.day(epoch)
         }
-        return TaskResult.NoFreeSlot
+        return { epoch -> byDay[epoch].orEmpty() }
+    }
+
+    suspend fun proposeRecovery(
+        option: RecoveryOption, task: PlannedTaskEntity, today: LocalDate = Dates.today(), nowMin: Int = Dates.nowMinutes(),
+    ): RecoveryProposal? =
+        Recovery.propose(option, task, today.toEpochDay(), nowMin, sleepWindow(), daysFrom(today))
+
+    suspend fun proposeRecoverRest(
+        missed: List<PlannedTaskEntity>, today: LocalDate = Dates.today(), nowMin: Int = Dates.nowMinutes(),
+    ): BatchProposal = Recovery.proposeRecoverRest(missed, today.toEpochDay(), nowMin, sleepWindow(), daysFrom(today))
+
+    suspend fun proposeMinimumViableDay(date: LocalDate, nowMin: Int): BatchProposal {
+        ensureDay(date)
+        return Recovery.minimumViableDay(dao.day(date.toEpochDay()), nowMin)
+    }
+
+    /** Writes every change in one transaction. Each update targets its own row id, so nothing is duplicated. */
+    suspend fun applyChanges(changes: List<TaskChange>) {
+        if (changes.isEmpty()) return
+        db.withTransaction { changes.forEach { dao.upsertTask(it.updated) } }
+        onChanged()
+    }
+
+    /** Restores the pre-change copies. */
+    suspend fun undoChanges(changes: List<TaskChange>) {
+        if (changes.isEmpty()) return
+        db.withTransaction { changes.forEach { dao.upsertTask(it.original) } }
+        onChanged()
     }
 
     suspend fun recordActual(taskId: Long, minutes: Int) {
