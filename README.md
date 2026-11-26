@@ -1,8 +1,62 @@
-# Kumo
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Kumo: Build the person you want to become." width="100%">
+</p>
 
-*Build the person you want to become.*
+<p align="center">
+  <a href="https://github.com/DivyankLosse/kumo/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/DivyankLosse/kumo/actions/workflows/android.yml/badge.svg"></a>
+  <a href="https://github.com/DivyankLosse/kumo/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/DivyankLosse/kumo?color=FFE08A&labelColor=0D1120"></a>
+  <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-2.1-7FA8D6?logo=kotlin&logoColor=white&labelColor=0D1120">
+  <img alt="Jetpack Compose" src="https://img.shields.io/badge/Jetpack%20Compose-Material%203-A8C6E7?logo=jetpackcompose&logoColor=white&labelColor=0D1120">
+  <img alt="Rive" src="https://img.shields.io/badge/Rive-animated%20mascot-F4B6A6?labelColor=0D1120">
+  <img alt="Offline first" src="https://img.shields.io/badge/offline-first-B5D8B0?labelColor=0D1120">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-FFF7D6?labelColor=0D1120"></a>
+</p>
 
-Kumo (renamed from the working title "ASCEND 2027") is a native Android personal-transformation app built with Kotlin and Jetpack Compose. It has no WebView, PWA, React Native or Expo layers. It works offline first, and its companion is an original bear cub that walks with you through focus sessions.
+<p align="center">
+  <b>Plan the day, focus with a friend, and watch the year add up.</b><br>
+  A native Android planner for study, career, fitness and habits. No account, no cloud and no invented numbers.<br>
+  Kumo, the bear cub, walks a mountain ridge with you while your focus timer runs.
+</p>
+
+<p align="center">
+  <img src="docs/assets/screens/home.png" width="23%" alt="Home: daily rings and focus card">
+  <img src="docs/assets/screens/focus.png" width="23%" alt="Focus session: Kumo walks the ridge">
+  <img src="docs/assets/screens/celebration.png" width="23%" alt="Summit celebration">
+  <img src="docs/assets/screens/companion.png" width="23%" alt="Kumo companion, fur and shop">
+</p>
+<p align="center">
+  <img src="docs/assets/screens/planner.png" width="23%" alt="Planner with sleep guardrail">
+  <img src="docs/assets/screens/career.png" width="23%" alt="Career roadmap">
+  <img src="docs/assets/screens/fitness.png" width="23%" alt="Fitness split and training calendar">
+  <img src="docs/assets/screens/home_light.png" width="23%" alt="Light mode">
+</p>
+
+## ✨ Features
+
+| | |
+|---|---|
+| 🗓️ **Planner that protects sleep** | Mon–Sun templates, day and week views, recurring blocks and reminders. "Reschedule missed" finds the next free slot and never touches 22:30–06:30. |
+| 🐻 **Focus with Kumo** | Pick a category and a length; Kumo walks a parallax ridge while the timer runs. Finish to get a summit celebration with confetti, earn honey, and plant something in the park. |
+| 🎯 **Career roadmap** | A 4-phase Applied AI/ML plan with milestones, practical checks, coding-problem counts, projects, resources and weekly deliverables. |
+| 🏋️ **Fitness** | A 5-day split, set/rep/weight logger with a rest timer, PRs (e1RM), progressive-overload trends, weight and measurements, and private progress photos. |
+| 🥗 **Honest nutrition** | Manual entries only. Blank stays blank; Kumo never estimates or invents a number. Water and sleep are tracked here too. |
+| 📚 **More modules** | Academics, Communication (speaking timer and voice notes), Grooming, Posture (with a non-medical disclaimer), and Social-confidence challenges. |
+| 🔔 **Gentle reminders + widget** | WorkManager reminders with per-type switches, and a Glance "Kumo today" home-screen widget. |
+| 🔒 **Yours, offline** | Room + DataStore on the device, one-tap JSON backup and restore, and CSV export. The optional AI Coach talks only to a proxy you run. |
+
+## 📲 Install
+
+Download `kumo-*-debug.apk` from the [latest release](https://github.com/DivyankLosse/kumo/releases/latest), or the `kumo-debug-apk` artifact of any green [CI run](https://github.com/DivyankLosse/kumo/actions). Then install it on Android 8.0+ (allow "install unknown apps" for your browser or file manager).
+
+## 🧭 Roadmap
+
+The honest review and the v1.0.1 plan (onboarding for any schedule, overload advisor, one-tap logging, weekly review, grounded AI coach) are in [docs/ROADMAP-v1.0.1.md](docs/ROADMAP-v1.0.1.md).
+
+---
+
+## Engineering notes
+
+Kumo (renamed from the working title "ASCEND 2027") is a native Android app built with Kotlin and Jetpack Compose: no WebView, PWA, React Native or Expo layers.
 
 ## 1. Source
 - `app/src/main/java/com/ascend/app/`
@@ -91,3 +145,7 @@ Last run 2026-11-26: **24/24 JVM unit tests pass, 18/18 instrumented tests pass*
 - The AI Coach needs the user's proxy. The expected contract is `POST {url}/v1/coach` with `{messages:[{role,content}], context}`, returning `{reply}`.
 - The package id is still `com.ascend.app` (internal only).
 - Tested on an emulator only. Gestures and performance still need a real phone.
+
+## License
+
+[MIT](LICENSE) © 2026 Divyank Khewale. Kumo, the character, and its artwork are original to this project.

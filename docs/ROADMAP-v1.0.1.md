@@ -10,14 +10,14 @@ Written 2026-11-26 against commit `a8e457a`. The app was renamed from "ASCEND 20
 |---|---|
 | Hardcoded keys/secrets (full git history) | None found. The AI Coach talks only to a user-configured proxy, and the APK holds no model keys. `font_certs.xml` holds Google's public Play-services font certificates, which are not secrets. |
 | Personal data in the repo | None. The seed profile is generic ("Ascender", 173 cm, etc.). Your name, email and phone appear nowhere. |
-| Commit identity | `Divyank <divyank@Divyanks-MacBook-Air.local>` is a local hostname, so it leaks nothing, but GitHub won't credit these commits to your profile. Fixing that means rewriting 3 commits and force-pushing (§1.2). |
+| Commit identity | Rewritten before v1.0.0 to the GitHub noreply address, so commits are credited to the profile and no personal email is exposed. |
 | Unfinished stubs | No TODO, FIXME or `NotImplemented` markers. The Coach backend doesn't exist yet, but the client says "no reply" honestly instead of faking one, so this is not a stub. |
 | Build | Debug builds locally and in CI: GitHub Actions runs on `main`, both runs so far are green, and each uploads the `kumo-debug-apk` artifact. The R8-minified release build compiles but is **unsigned** and has never been run. |
 | Tests | 24 JVM tests + 18 instrumented tests, all passing on an API 35 emulator. |
-| License | **Missing.** Without one the code is "all rights reserved", even in a public repo. |
+| License | MIT (`LICENSE`), added for v1.0.0. |
 | Docs | README covers build steps, schema, the Rive pipeline and known limitations. |
 
-### 1.1 Publishing v1.0.0
+### 1.1 Publishing v1.0.0 (done 2026-11-26; kept for reference)
 ```bash
 # 1. pick and add a license (MIT shown), commit
 gh api /licenses/mit -q .body | sed "s/\[year\]/2026/; s/\[fullname\]/Divyank/" > LICENSE
@@ -31,7 +31,7 @@ git push origin main v1.0.0
 gh repo edit DivyankLosse/kumo --visibility public --accept-visibility-change-consequences
 ```
 
-### 1.2 Optional: credit commits to your GitHub profile (rewrites history)
+### 1.2 Credit commits to your GitHub profile (done before tagging)
 ```bash
 git config user.email "<id>+DivyankLosse@users.noreply.github.com"   # from github.com/settings/emails
 git rebase -r --root --exec 'git commit --amend --no-edit --reset-author'
