@@ -35,7 +35,7 @@ class NavigationTest {
         tab("Career"); waitForText("Applied AI/ML Engineer by December 2027")
         tab("Fitness"); waitForText("Training calendar")
         tab("Profile"); waitForText("Modules")
-        tab("Home"); waitForText("Today")
+        tab("Home"); waitForText("Start 45-minute session")
     }
 
     @Test
